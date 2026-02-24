@@ -1,5 +1,5 @@
 // Vercel Serverless Function: POST /api/generate-recipe
-// OpenRouter ONLY — no Gemini
+// OpenRouter ONLY
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -18,7 +18,7 @@ function parseAIResponse(text) {
     try { const p = JSON.parse(clean); if (p.dishName) return normalizeRecipe(p); } catch { }
     const match = clean.match(/\{[\s\S]*\}/);
     if (match) { try { const p = JSON.parse(match[0]); if (p.dishName) return normalizeRecipe(p); } catch { } }
-    return { dishName: dishName || 'Recipe', cuisine: '', ingredients: [], recipe: { steps: [text] }, nutrition: {} };
+    return { dishName: 'Recipe', cuisine: '', ingredients: [], recipe: { steps: [text] }, nutrition: {} };
 }
 
 function normalizeRecipe(p) {
@@ -52,11 +52,13 @@ export default async function handler(req, res) {
     const errors = [];
     let aiText = null;
 
-    // Try multiple free OpenRouter models
+    // Current confirmed free models on OpenRouter (Feb 2026)
     const models = [
-        'mistralai/mistral-7b-instruct:free',
-        'google/gemma-3-12b-it:free',
-        'meta-llama/llama-3.2-3b-instruct:free'
+        'meta-llama/llama-4-maverick:free',
+        'meta-llama/llama-4-scout:free',
+        'deepseek/deepseek-chat-v3-0324:free',
+        'mistralai/mistral-small-3.1-24b-instruct:free',
+        'nousresearch/deephermes-3-llama-3-8b-preview:free'
     ];
 
     for (const model of models) {
@@ -78,20 +80,25 @@ export default async function handler(req, res) {
                 })
             });
 
+            const responseText = await response.text();
+
             if (response.ok) {
-                const data = await response.json();
-                const text = data.choices?.[0]?.message?.content || '';
-                if (text.trim()) {
-                    aiText = text;
-                } else {
-                    errors.push(model + ': empty response');
+                try {
+                    const data = JSON.parse(responseText);
+                    const text = data.choices?.[0]?.message?.content || '';
+                    if (text.trim()) {
+                        aiText = text;
+                    } else {
+                        errors.push(model + ': empty response body');
+                    }
+                } catch {
+                    errors.push(model + ': invalid JSON in response');
                 }
             } else {
-                const errBody = await response.text().catch(() => '');
-                errors.push(model + ': HTTP ' + response.status + ' ' + errBody.slice(0, 150));
+                errors.push(model + ': HTTP ' + response.status + ' - ' + responseText.slice(0, 200));
             }
         } catch (err) {
-            errors.push(model + ': ' + err.message);
+            errors.push(model + ': fetch error - ' + err.message);
         }
     }
 
@@ -99,8 +106,11 @@ export default async function handler(req, res) {
         return res.status(502).json({
             error: 'Could not get AI response.',
             details: errors,
-            keyPrefix: orKey.substring(0, 10) + '...',
-            keyLength: orKey.length
+            keyInfo: {
+                prefix: orKey.substring(0, 12) + '...',
+                length: orKey.length,
+                startsWithSkOr: orKey.startsWith('sk-or-')
+            }
         });
     }
 

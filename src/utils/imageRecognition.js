@@ -82,7 +82,9 @@ export async function generateRecipeByName(dishName) {
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Server error (${response.status})`);
+    const details = errData.details ? '\n' + errData.details.join('\n') : '';
+    const keyInfo = errData.keyInfo ? `\nKey: ${errData.keyInfo.prefix} (len=${errData.keyInfo.length})` : '';
+    throw new Error((errData.error || `Server error (${response.status})`) + details + keyInfo);
   }
 
   const data = await response.json();
