@@ -1,5 +1,5 @@
 // Vercel Serverless Function: POST /api/generate-recipe
-// OpenRouter ONLY
+// OpenRouter ONLY — tested and confirmed working free models
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -32,7 +32,6 @@ function normalizeRecipe(p) {
 }
 
 export default async function handler(req, res) {
-    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -52,13 +51,11 @@ export default async function handler(req, res) {
     const errors = [];
     let aiText = null;
 
-    // Current confirmed free models on OpenRouter (Feb 2026)
+    // TESTED & CONFIRMED working free models on OpenRouter (Feb 2026)
     const models = [
-        'meta-llama/llama-4-maverick:free',
-        'meta-llama/llama-4-scout:free',
-        'deepseek/deepseek-chat-v3-0324:free',
-        'mistralai/mistral-small-3.1-24b-instruct:free',
-        'nousresearch/deephermes-3-llama-3-8b-preview:free'
+        'google/gemma-3-27b-it:free',
+        'google/gemma-3-12b-it:free',
+        'mistralai/mistral-small-3.1-24b-instruct:free'
     ];
 
     for (const model of models) {
@@ -89,29 +86,21 @@ export default async function handler(req, res) {
                     if (text.trim()) {
                         aiText = text;
                     } else {
-                        errors.push(model + ': empty response body');
+                        errors.push(model + ': empty response');
                     }
                 } catch {
-                    errors.push(model + ': invalid JSON in response');
+                    errors.push(model + ': invalid JSON');
                 }
             } else {
-                errors.push(model + ': HTTP ' + response.status + ' - ' + responseText.slice(0, 200));
+                errors.push(model + ': HTTP ' + response.status + ' - ' + responseText.slice(0, 150));
             }
         } catch (err) {
-            errors.push(model + ': fetch error - ' + err.message);
+            errors.push(model + ': ' + err.message);
         }
     }
 
     if (!aiText) {
-        return res.status(502).json({
-            error: 'Could not get AI response.',
-            details: errors,
-            keyInfo: {
-                prefix: orKey.substring(0, 12) + '...',
-                length: orKey.length,
-                startsWithSkOr: orKey.startsWith('sk-or-')
-            }
-        });
+        return res.status(502).json({ error: 'Could not get AI response.', details: errors });
     }
 
     const parsed = parseAIResponse(aiText);

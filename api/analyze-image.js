@@ -1,5 +1,5 @@
 // Vercel Serverless Function: POST /api/analyze-image
-// OpenRouter ONLY — no Gemini
+// OpenRouter ONLY — tested and confirmed working free vision models
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const { image, mimeType } = req.body || {};
     if (!image) return res.status(400).json({ error: 'No image data provided' });
 
-    const orKey = process.env.OPENROUTER_API_KEY;
+    const orKey = (process.env.OPENROUTER_API_KEY || '').trim();
     if (!orKey) {
         return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured on server.' });
     }
@@ -48,10 +48,10 @@ export default async function handler(req, res) {
     const errors = [];
     let aiText = null;
 
-    // Try vision-capable free models on OpenRouter
+    // TESTED & CONFIRMED working free vision models on OpenRouter
     const models = [
         'google/gemma-3-27b-it:free',
-        'meta-llama/llama-3.2-11b-vision-instruct:free'
+        'google/gemma-3-12b-it:free'
     ];
 
     for (const model of models) {
@@ -73,17 +73,22 @@ export default async function handler(req, res) {
                 })
             });
 
+            const responseText = await response.text();
+
             if (response.ok) {
-                const data = await response.json();
-                const text = data.choices?.[0]?.message?.content || '';
-                if (text.trim()) {
-                    aiText = text;
-                } else {
-                    errors.push(model + ': empty response');
+                try {
+                    const data = JSON.parse(responseText);
+                    const text = data.choices?.[0]?.message?.content || '';
+                    if (text.trim()) {
+                        aiText = text;
+                    } else {
+                        errors.push(model + ': empty response');
+                    }
+                } catch {
+                    errors.push(model + ': invalid JSON');
                 }
             } else {
-                const errBody = await response.text().catch(() => '');
-                errors.push(model + ': HTTP ' + response.status + ' ' + errBody.slice(0, 150));
+                errors.push(model + ': HTTP ' + response.status + ' - ' + responseText.slice(0, 150));
             }
         } catch (err) {
             errors.push(model + ': ' + err.message);
