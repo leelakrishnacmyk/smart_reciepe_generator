@@ -58,6 +58,138 @@ Reply with ONLY valid JSON in this exact format (no markdown, no code fences):
   }
 }`;
 
+function buildRecipeByNamePrompt(dishName) {
+    return 'You are a professional chef. The user wants to cook "' + dishName + '".\n\n' +
+        '1. Confirm the dish name\n' +
+        '2. List all ingredients with exact quantities\n' +
+        '3. Provide detailed step-by-step cooking instructions\n' +
+        '4. Estimate nutritional information per serving\n\n' +
+        'Reply with ONLY valid JSON in this exact format (no markdown, no code fences):\n' +
+        '{\n' +
+        '  "dishName": "' + dishName + '",\n' +
+        '  "cuisine": "Italian/Indian/Chinese/etc",\n' +
+        '  "ingredients": [\n' +
+        '    {"name": "ingredient name", "quantity": "amount with unit"}\n' +
+        '  ],\n' +
+        '  "recipe": {\n' +
+        '    "servings": 4,\n' +
+        '    "prepTime": "15 mins",\n' +
+        '    "cookTime": "30 mins",\n' +
+        '    "difficulty": "Easy/Medium/Hard",\n' +
+        '    "steps": [\n' +
+        '      "Step 1 description",\n' +
+        '      "Step 2 description"\n' +
+        '    ]\n' +
+        '  },\n' +
+        '  "nutrition": {\n' +
+        '    "calories": 450,\n' +
+        '    "protein": "28g",\n' +
+        '    "carbs": "55g",\n' +
+        '    "fat": "12g",\n' +
+        '    "fiber": "4g"\n' +
+        '  }\n' +
+        '}';
+}
+
+// ===== POST /api/generate-recipe =====
+app.post('/api/generate-recipe', async (req, res) => {
+    try {
+        const { dishName } = req.body;
+
+        if (!dishName || !dishName.trim()) {
+            return res.status(400).json({ error: 'No dish name provided' });
+        }
+
+        console.log('[Server] Received recipe generation request for:', dishName);
+        const prompt = buildRecipeByNamePrompt(dishName.trim());
+
+        let aiText = null;
+
+        // Try OpenRouter first
+        const orKey = process.env.OPENROUTER_API_KEY;
+        if (orKey) {
+            console.log('[Server] Trying OpenRouter for recipe generation...');
+            try {
+                const response = await fetch(OPENROUTER_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + orKey,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'http://localhost:5173',
+                        'X-Title': 'Smart Recipe Generator'
+                    },
+                    body: JSON.stringify({
+                        model: 'openrouter/free',
+                        messages: [{
+                            role: 'user',
+                            content: prompt
+                        }],
+                        max_tokens: 2048,
+                        temperature: 0.3
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    aiText = data.choices?.[0]?.message?.content || '';
+                    console.log('[OpenRouter] Recipe response received, length:', aiText.length);
+                } else {
+                    const err = await response.text().catch(() => '');
+                    console.error('[OpenRouter] Error:', response.status, err);
+                }
+            } catch (err) {
+                console.error('[OpenRouter] Fetch error:', err.message);
+            }
+        }
+
+        // Fallback to Gemini
+        if (!aiText) {
+            const gemKey = process.env.GEMINI_API_KEY;
+            if (gemKey) {
+                console.log('[Server] Trying Gemini for recipe generation...');
+                try {
+                    const response = await fetch(GEMINI_URL + '?key=' + gemKey, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [{ text: prompt }]
+                            }],
+                            generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const candidate = data.candidates?.[0];
+                        if (candidate && candidate.finishReason !== 'SAFETY') {
+                            aiText = candidate.content?.parts?.[0]?.text || '';
+                            console.log('[Gemini] Recipe response received, length:', aiText.length);
+                        }
+                    } else {
+                        console.error('[Gemini] Error:', response.status);
+                    }
+                } catch (err) {
+                    console.error('[Gemini] Fetch error:', err.message);
+                }
+            }
+        }
+
+        if (!aiText) {
+            return res.status(502).json({ error: 'Could not get AI response. Check API keys.' });
+        }
+
+        const parsed = parseAIResponse(aiText);
+        console.log('[Server] Generated recipe:', parsed.dishName, '| Steps:', parsed.recipe?.steps?.length);
+
+        res.json(parsed);
+
+    } catch (err) {
+        console.error('[Server] Error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ===== POST /api/analyze-image =====
 app.post('/api/analyze-image', async (req, res) => {
     try {
@@ -76,11 +208,11 @@ app.post('/api/analyze-image', async (req, res) => {
         if (orKey) {
             console.log('[Server] Trying OpenRouter...');
             try {
-                const dataUrl = `data:${mimeType || 'image/jpeg'};base64,${image}`;
+                const dataUrl = 'data:' + (mimeType || 'image/jpeg') + ';base64,' + image;
                 const response = await fetch(OPENROUTER_URL, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${orKey}`,
+                        'Authorization': 'Bearer ' + orKey,
                         'Content-Type': 'application/json',
                         'HTTP-Referer': 'http://localhost:5175',
                         'X-Title': 'Smart Recipe Generator'
@@ -119,7 +251,7 @@ app.post('/api/analyze-image', async (req, res) => {
                 console.log('[Server] Trying Gemini...');
                 for (let attempt = 1; attempt <= 3; attempt++) {
                     try {
-                        const response = await fetch(`${GEMINI_URL}?key=${gemKey}`, {
+                        const response = await fetch(GEMINI_URL + '?key=' + gemKey, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -134,7 +266,7 @@ app.post('/api/analyze-image', async (req, res) => {
                         });
 
                         if (response.status === 429 && attempt < 3) {
-                            console.log(`[Gemini] Rate limited, retrying in ${attempt * 5}s...`);
+                            console.log('[Gemini] Rate limited, retrying in ' + (attempt * 5) + 's...');
                             await new Promise(r => setTimeout(r, attempt * 5000));
                             continue;
                         }
@@ -240,9 +372,10 @@ function extractIngredientsList(text) {
 }
 
 app.listen(PORT, () => {
-    console.log(`\n🍳 Smart Recipe Generator API running on http://localhost:${PORT}`);
-    console.log(`   POST /api/analyze-image — Send food photo for analysis`);
-    console.log(`   GET  /api/health       — Health check\n`);
-    console.log(`   OpenRouter key: ${process.env.OPENROUTER_API_KEY ? '✅ configured' : '❌ missing'}`);
-    console.log(`   Gemini key:     ${process.env.GEMINI_API_KEY ? '✅ configured' : '❌ missing'}\n`);
+    console.log('\n🍳 Smart Recipe Generator API running on http://localhost:' + PORT);
+    console.log('   POST /api/analyze-image  — Send food photo for analysis');
+    console.log('   POST /api/generate-recipe — Generate recipe by dish name');
+    console.log('   GET  /api/health         — Health check\n');
+    console.log('   OpenRouter key: ' + (process.env.OPENROUTER_API_KEY ? '✅ configured' : '❌ missing'));
+    console.log('   Gemini key:     ' + (process.env.GEMINI_API_KEY ? '✅ configured' : '❌ missing') + '\n');
 });

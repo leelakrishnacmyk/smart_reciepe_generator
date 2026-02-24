@@ -64,3 +64,42 @@ export async function analyzeImage(file, onStatus) {
     message: `Identified: ${data.dishName || 'a dish'} (${ingredientNames.length} ingredients detected)`
   };
 }
+
+/**
+ * Generate a recipe by dish name — calls backend POST /api/generate-recipe.
+ * Returns same shape as analyzeImage() for compatibility with AIRecipeResult.
+ */
+export async function generateRecipeByName(dishName) {
+  if (!dishName || !dishName.trim()) {
+    throw new Error('Please enter a dish or recipe name.');
+  }
+
+  const response = await fetch('/api/generate-recipe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dishName: dishName.trim() })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Server error (${response.status})`);
+  }
+
+  const data = await response.json();
+  console.log('[API] Generated recipe response:', data);
+
+  const ingredientNames = (data.ingredients || []).map(i =>
+    typeof i === 'string' ? i.toLowerCase() : (i.name || '').toLowerCase()
+  ).filter(Boolean);
+
+  return {
+    dishName: data.dishName || dishName,
+    cuisine: data.cuisine || '',
+    ingredients: ingredientNames,
+    fullIngredients: data.ingredients || [],
+    recipe: data.recipe || { steps: [] },
+    nutrition: data.nutrition || {},
+    confidence: 'high',
+    message: `Recipe generated for: ${data.dishName || dishName}`
+  };
+}

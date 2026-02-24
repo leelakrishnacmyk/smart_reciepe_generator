@@ -1,12 +1,13 @@
-import { Camera, Loader, Plus, X } from 'lucide-react';
+import { Camera, ChefHat, Loader, Plus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { allIngredients } from '../data/recipes';
-import { analyzeImage } from '../utils/imageRecognition';
+import { analyzeImage, generateRecipeByName } from '../utils/imageRecognition';
 
 export default function IngredientInput({ ingredients, setIngredients, onAIRecipe }) {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [analyzeStatus, setAnalyzeStatus] = useState('');
   const [imageMessage, setImageMessage] = useState('');
   const [imageMessageType, setImageMessageType] = useState('info');
@@ -81,6 +82,30 @@ export default function IngredientInput({ ingredients, setIngredients, onAIRecip
     }
   };
 
+  const handleGenerateRecipe = async () => {
+    if (!input.trim()) return;
+
+    setIsGenerating(true);
+    setImageMessage('');
+    try {
+      const result = await generateRecipeByName(input.trim());
+      setImageMessage(result.message);
+      setImageMessageType('success');
+      setInput('');
+      setSuggestions([]);
+
+      // Pass the AI recipe result to parent
+      if (onAIRecipe) {
+        onAIRecipe(result);
+      }
+    } catch (err) {
+      setImageMessage(err.message || 'Failed to generate recipe.');
+      setImageMessageType('error');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="ingredient-input-container">
       <div className="input-row">
@@ -99,6 +124,17 @@ export default function IngredientInput({ ingredients, setIngredients, onAIRecip
             </button>
           )}
         </div>
+        {input.trim() && (
+          <button
+            className="btn-ai-recipe"
+            onClick={handleGenerateRecipe}
+            disabled={isGenerating}
+            title="Generate full recipe for this dish using AI"
+          >
+            {isGenerating ? <Loader size={18} className="spin" /> : <ChefHat size={18} />}
+            <span>{isGenerating ? 'Generating...' : '🤖 Get AI Recipe'}</span>
+          </button>
+        )}
         <button
           className="btn-upload"
           onClick={() => fileInputRef.current?.click()}

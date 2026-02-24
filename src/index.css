@@ -320,6 +320,30 @@ button {
   opacity: 0.7;
 }
 
+.btn-ai-recipe {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.btn-ai-recipe:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.btn-ai-recipe:disabled {
+  opacity: 0.7;
+}
+
 .btn-api-key {
   display: flex;
   align-items: center;
