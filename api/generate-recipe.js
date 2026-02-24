@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     if (!dishName || !dishName.trim()) return res.status(400).json({ error: 'No dish name provided' });
 
     const prompt = buildPrompt(dishName.trim());
-    const orKey = process.env.OPENROUTER_API_KEY;
+    const orKey = (process.env.OPENROUTER_API_KEY || '').trim();
 
     if (!orKey) {
         return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured on server.' });
@@ -96,7 +96,12 @@ export default async function handler(req, res) {
     }
 
     if (!aiText) {
-        return res.status(502).json({ error: 'Could not get AI response.', details: errors });
+        return res.status(502).json({
+            error: 'Could not get AI response.',
+            details: errors,
+            keyPrefix: orKey.substring(0, 10) + '...',
+            keyLength: orKey.length
+        });
     }
 
     const parsed = parseAIResponse(aiText);
