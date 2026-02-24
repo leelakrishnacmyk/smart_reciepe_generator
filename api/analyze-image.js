@@ -1,11 +1,12 @@
 // Vercel Serverless Function: POST /api/analyze-image
+// OpenRouter ONLY — no Gemini
+
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 const RECIPE_PROMPT = 'You are a professional chef. Analyze this food image.\n' +
     '1. Identify the dish\n2. List ingredients with quantities\n3. Give step-by-step cooking instructions\n4. Estimate nutrition per serving\n\n' +
-    'Reply with ONLY valid JSON, no markdown:\n' +
-    '{"dishName":"Dish Name","cuisine":"Cuisine Type","ingredients":[{"name":"ingredient","quantity":"amount"}],' +
+    'Reply ONLY with valid JSON (no markdown, no code fences):\n' +
+    '{"dishName":"Dish Name","cuisine":"Cuisine","ingredients":[{"name":"item","quantity":"amount"}],' +
     '"recipe":{"servings":4,"prepTime":"15 mins","cookTime":"30 mins","difficulty":"Medium","steps":["Step 1...","Step 2..."]},' +
     '"nutrition":{"calories":400,"protein":"25g","carbs":"50g","fat":"10g","fiber":"5g"}}';
 
@@ -38,76 +39,61 @@ export default async function handler(req, res) {
     const { image, mimeType } = req.body || {};
     if (!image) return res.status(400).json({ error: 'No image data provided' });
 
+    const orKey = process.env.OPENROUTER_API_KEY;
+    if (!orKey) {
+        return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured on server.' });
+    }
+
+    const dataUrl = 'data:' + (mimeType || 'image/jpeg') + ';base64,' + image;
+    const errors = [];
     let aiText = null;
 
-    // --- Try Gemini first (supports vision natively) ---
-    const gemKey = process.env.GEMINI_API_KEY;
-    if (gemKey) {
+    // Try vision-capable free models on OpenRouter
+    const models = [
+        'google/gemma-3-27b-it:free',
+        'meta-llama/llama-3.2-11b-vision-instruct:free'
+    ];
+
+    for (const model of models) {
+        if (aiText) break;
         try {
-            const response = await fetch(GEMINI_URL + '?key=' + gemKey, {
+            const response = await fetch(OPENROUTER_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Authorization': 'Bearer ' + orKey,
+                    'Content-Type': 'application/json',
+                    'HTTP-Referer': 'https://smart-reciepe-generator.vercel.app',
+                    'X-Title': 'Smart Recipe Generator'
+                },
                 body: JSON.stringify({
-                    contents: [{ parts: [{ text: RECIPE_PROMPT }, { inlineData: { mimeType: mimeType || 'image/jpeg', data: image } }] }],
-                    generationConfig: { temperature: 0.2, maxOutputTokens: 2048 }
+                    model: model,
+                    messages: [{ role: 'user', content: [{ type: 'text', text: RECIPE_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+                    max_tokens: 2048,
+                    temperature: 0.2
                 })
             });
+
             if (response.ok) {
                 const data = await response.json();
-                const candidate = data.candidates?.[0];
-                if (candidate && candidate.finishReason !== 'SAFETY') {
-                    aiText = candidate.content?.parts?.[0]?.text || '';
+                const text = data.choices?.[0]?.message?.content || '';
+                if (text.trim()) {
+                    aiText = text;
+                } else {
+                    errors.push(model + ': empty response');
                 }
             } else {
                 const errBody = await response.text().catch(() => '');
-                console.error('[Gemini] Error:', response.status, errBody);
+                errors.push(model + ': HTTP ' + response.status + ' ' + errBody.slice(0, 150));
             }
         } catch (err) {
-            console.error('[Gemini] Fetch error:', err.message);
+            errors.push(model + ': ' + err.message);
         }
     }
 
-    // --- Fallback: OpenRouter with vision-capable free models ---
     if (!aiText) {
-        const orKey = process.env.OPENROUTER_API_KEY;
-        if (orKey) {
-            const dataUrl = 'data:' + (mimeType || 'image/jpeg') + ';base64,' + image;
-            const visionModels = [
-                'google/gemma-3-27b-it:free',
-                'meta-llama/llama-3.2-11b-vision-instruct:free'
-            ];
-            for (const model of visionModels) {
-                if (aiText) break;
-                try {
-                    const response = await fetch(OPENROUTER_URL, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': 'Bearer ' + orKey,
-                            'Content-Type': 'application/json',
-                            'HTTP-Referer': 'https://smart-reciepe-generator.vercel.app',
-                            'X-Title': 'Smart Recipe Generator'
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: [{ role: 'user', content: [{ type: 'text', text: RECIPE_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }],
-                            max_tokens: 2048,
-                            temperature: 0.2
-                        })
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        aiText = data.choices?.[0]?.message?.content || '';
-                    } else {
-                        console.error('[OpenRouter] Error with model ' + model + ':', response.status);
-                    }
-                } catch (err) {
-                    console.error('[OpenRouter] Fetch error:', err.message);
-                }
-            }
-        }
+        return res.status(502).json({ error: 'Could not get AI response.', details: errors });
     }
 
-    if (!aiText) return res.status(502).json({ error: 'Could not get AI response. Check API keys.' });
     const parsed = parseAIResponse(aiText);
     if (!parsed) return res.status(502).json({ error: 'Could not parse AI response.' });
     res.json(parsed);

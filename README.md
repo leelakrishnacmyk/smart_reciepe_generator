@@ -1,8 +1,8 @@
 # 🍳 Smart Recipe Generator
 
-An AI-powered recipe discovery app that lets users find recipes by entering ingredients or uploading food photos. Built with **React + Vite** frontend and **Express.js** backend.
+An AI-powered recipe discovery app that lets users find recipes by entering ingredients, uploading food photos, or simply typing a dish name. Built with **React + Vite** frontend and **Vercel Serverless Functions** backend.
 
-**Live Demo**: _[Add your deployed URL here]_
+**🔗 Live Demo**: [https://smart-reciepe-generator.vercel.app](https://smart-reciepe-generator.vercel.app)
 
 ---
 
@@ -11,7 +11,8 @@ An AI-powered recipe discovery app that lets users find recipes by entering ingr
 | Feature | Description |
 |---------|-------------|
 | **Ingredient Input** | Text input with autocomplete suggestions from 100+ ingredients |
-| **Image Recognition** | Upload a food photo → AI identifies the dish name + full recipe (via OpenRouter/Gemini vision models) |
+| **AI Recipe by Name** | Type any dish name → AI generates full recipe with ingredients, steps, and nutrition (via OpenRouter) |
+| **Image Recognition** | Upload a food photo → AI identifies the dish name + full recipe (via OpenRouter vision models) |
 | **Recipe Matching** | Smart algorithm scores recipes by ingredient overlap with match percentages |
 | **Filters** | Filter by dietary preference (vegetarian, vegan, gluten-free), difficulty, cooking time, cuisine |
 | **Serving Size Adjuster** | Dynamically scales ingredient quantities and nutritional info |
@@ -68,7 +69,8 @@ smart-recipe-generator/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/analyze-image` | Accepts `{ image: base64, mimeType: string }`, returns dish name, ingredients, recipe steps, and nutrition |
-| `GET`  | `/api/health` | Returns `{ status: "ok", timestamp: "..." }` |
+| `POST` | `/api/generate-recipe` | Accepts `{ dishName: string }`, returns full AI-generated recipe |
+| `GET`  | `/api/debug` | Returns API key configuration status |
 
 ### POST /api/analyze-image — Request
 
@@ -118,7 +120,7 @@ smart-recipe-generator/
 
 - **Node.js** v18+
 - **npm** v9+
-- An API key from [OpenRouter](https://openrouter.ai/keys) (free, no credit card) or [Google AI Studio](https://aistudio.google.com/apikey)
+- An API key from [OpenRouter](https://openrouter.ai/keys) (free, no credit card required)
 
 ### Installation
 
@@ -137,10 +139,9 @@ Create a `.env` file in the project root:
 
 ```env
 OPENROUTER_API_KEY=sk-or-your-key-here
-GEMINI_API_KEY=your-gemini-key-here
 ```
 
-> At least one API key is required. OpenRouter is recommended (free tier, no rate limits).
+> Get your free key at [openrouter.ai/keys](https://openrouter.ai/keys).
 
 ### Running Locally
 
@@ -171,7 +172,7 @@ npm run build
 
 The Smart Recipe Generator uses a **two-tier architecture**: a React frontend for the UI and an Express.js backend for secure AI API communication.
 
-**Ingredient Classification**: Users input ingredients via text (with autocomplete from a curated database of 100+ ingredients) or by uploading food photos. Images are sent to the backend via a **POST** request, where OpenRouter's free vision models (with Gemini fallback) identify the dish and extract individual ingredients using structured JSON prompting.
+**Ingredient Classification**: Users input ingredients via text (with autocomplete from a curated database of 100+ ingredients), by uploading food photos, or by typing a dish name for AI recipe generation. Images and text prompts are sent to the backend via **POST** requests, where OpenRouter's free models identify the dish and extract individual ingredients using structured JSON prompting.
 
 **Recipe Matching Logic**: A scoring algorithm computes the overlap between user-provided ingredients and each recipe's ingredient list. Recipes are ranked by match percentage, with partial matches weighted by ingredient importance. The system also suggests **substitutions** for missing ingredients (e.g., Greek yogurt → sour cream).
 
@@ -187,7 +188,7 @@ The Smart Recipe Generator uses a **two-tier architecture**: a React frontend fo
 |-------|------------|
 | Frontend | React 19, React Router 7, Lucide Icons |
 | Backend | Express.js, Node.js |
-| AI/ML | OpenRouter (free vision models), Google Gemini 2.0 Flash |
+| AI/ML | OpenRouter (free vision + text models) |
 | Build | Vite 7 |
 | Storage | localStorage (favorites, ratings) |
 | Styling | Vanilla CSS with CSS variables |
