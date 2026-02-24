@@ -371,11 +371,15 @@ function extractIngredientsList(text) {
     return [...new Set(items)].map(name => ({ name, quantity: '' }));
 }
 
-app.listen(PORT, () => {
-    console.log('\n🍳 Smart Recipe Generator API running on http://localhost:' + PORT);
-    console.log('   POST /api/analyze-image  — Send food photo for analysis');
-    console.log('   POST /api/generate-recipe — Generate recipe by dish name');
-    console.log('   GET  /api/health         — Health check\n');
-    console.log('   OpenRouter key: ' + (process.env.OPENROUTER_API_KEY ? '✅ configured' : '❌ missing'));
-    console.log('   Gemini key:     ' + (process.env.GEMINI_API_KEY ? '✅ configured' : '❌ missing') + '\n');
-});
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`\n🍳 Smart Recipe Generator API running on http://localhost:${PORT}`);
+        console.log(`   POST /api/analyze-image  — Send food photo for analysis`);
+        console.log(`   POST /api/generate-recipe — Generate recipe by dish name`);
+        console.log(`   GET  /api/health         — Health check\n`);
+        console.log(`   OpenRouter key: ${process.env.OPENROUTER_API_KEY ? '✅ configured' : '❌ missing'}`);
+        console.log(`   Gemini key:     ${process.env.GEMINI_API_KEY ? '✅ configured' : '❌ missing'}\n`);
+    });
+}
+
+export default app;
