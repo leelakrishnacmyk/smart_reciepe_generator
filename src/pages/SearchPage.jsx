@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
-import { Search, ChefHat } from 'lucide-react';
-import recipes from '../data/recipes';
-import IngredientInput from '../components/IngredientInput';
+import { ChefHat, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import AIRecipeResult from '../components/AIRecipeResult';
 import FilterBar from '../components/FilterBar';
-import RecipeCard from '../components/RecipeCard';
+import IngredientInput from '../components/IngredientInput';
 import LoadingSpinner from '../components/LoadingSpinner';
+import RecipeCard from '../components/RecipeCard';
+import recipes from '../data/recipes';
 import { findRecipes } from '../utils/recipeMatching';
 
 export default function SearchPage({ favorites, toggleFavorite, ratings }) {
@@ -17,6 +18,7 @@ export default function SearchPage({ favorites, toggleFavorite, ratings }) {
   });
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [aiRecipe, setAiRecipe] = useState(null);
 
   const results = useMemo(() => {
     if (!hasSearched && ingredients.length === 0) return [];
@@ -26,11 +28,9 @@ export default function SearchPage({ favorites, toggleFavorite, ratings }) {
   const handleSearch = () => {
     setIsSearching(true);
     setHasSearched(true);
-    // Simulate a brief loading state for UX
     setTimeout(() => setIsSearching(false), 500);
   };
 
-  // Auto-search when ingredients change
   const handleIngredientsChange = (newIngredients) => {
     setIngredients(newIngredients);
     if (newIngredients.length > 0) {
@@ -40,17 +40,30 @@ export default function SearchPage({ favorites, toggleFavorite, ratings }) {
     }
   };
 
+  const handleAIRecipe = (result) => {
+    setAiRecipe(result);
+  };
+
   return (
     <div className="search-page">
       <div className="search-header">
         <h1><Search size={28} /> Find Recipes</h1>
-        <p>Enter the ingredients you have, and we'll find the best matching recipes.</p>
+        <p>Enter the ingredients you have, or upload a photo of your dish to get the full recipe.</p>
       </div>
 
       <IngredientInput
         ingredients={ingredients}
         setIngredients={handleIngredientsChange}
+        onAIRecipe={handleAIRecipe}
       />
+
+      {/* AI-Generated Recipe from Image */}
+      {aiRecipe && (
+        <AIRecipeResult
+          result={aiRecipe}
+          onClose={() => setAiRecipe(null)}
+        />
+      )}
 
       <FilterBar filters={filters} setFilters={setFilters} />
 
@@ -89,7 +102,7 @@ export default function SearchPage({ favorites, toggleFavorite, ratings }) {
         <div className="search-empty">
           <ChefHat size={64} />
           <h3>Start by adding ingredients</h3>
-          <p>Type ingredient names or upload a photo of your ingredients to find matching recipes.</p>
+          <p>Type ingredient names or upload a photo of your dish to get the full recipe.</p>
         </div>
       )}
     </div>

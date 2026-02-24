@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
-import { Plus, X, Camera, Loader } from 'lucide-react';
+import { Camera, Loader, Plus, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { allIngredients } from '../data/recipes';
 import { analyzeImage } from '../utils/imageRecognition';
 
-export default function IngredientInput({ ingredients, setIngredients }) {
+export default function IngredientInput({ ingredients, setIngredients, onAIRecipe }) {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -60,10 +60,17 @@ export default function IngredientInput({ ingredients, setIngredients }) {
       setAnalyzeStatus('');
       setImageMessage(result.message);
       setImageMessageType('success');
+
+      // Add detected ingredients to the ingredient tags
       const newIngredients = result.ingredients.filter(
         i => !ingredients.includes(i.toLowerCase())
       );
       setIngredients([...ingredients, ...newIngredients.map(i => i.toLowerCase())]);
+
+      // Pass the full AI recipe result to parent
+      if (onAIRecipe) {
+        onAIRecipe(result);
+      }
     } catch (err) {
       setImageMessage(err.message || 'Failed to analyze image.');
       setImageMessageType('error');
